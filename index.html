@@ -121,7 +121,7 @@
     let lastSpawn = 0;
     
     let diff = 1; 
-    let speedMultiplier = 0.8; // Starts slower at 0.8
+    let speedMultiplier = 1.0; // Starts slower at 0.8
     const MAX_SPEED_MULTIPLIER = 1.5; // Capped at 1.5
     
     let lives = 3;
@@ -195,7 +195,7 @@
         scoreEl.innerText = 0;
         lives = 3;
         totalAsteroidsSpawned = 0;
-        speedMultiplier = 0.8; // Reset to slow starting speed
+        speedMultiplier = 1.0; // Reset to slow starting speed
         diff = 1; 
         
         updateLivesUI();
@@ -254,7 +254,7 @@
         
         // --- NEW SLOWER SPEED SCALING MATH ---
         // Base is 0.8. Add 0.1 for every 50 asteroids. Cap at 1.5.
-        speedMultiplier = 0.8 + (Math.floor(totalAsteroidsSpawned / 50) * 0.1);
+        speedMultiplier = 1.0 + (Math.floor(totalAsteroidsSpawned / 50) * 0.1);
         if (speedMultiplier > MAX_SPEED_MULTIPLIER) {
             speedMultiplier = MAX_SPEED_MULTIPLIER;
         }
