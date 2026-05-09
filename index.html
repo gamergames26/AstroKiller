@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Void Runner</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Courier New', Courier, monospace;
+            touch-action: none;
+            color: #fff;
+            user-select: none;
+        }
+        canvas { display: block; }
+        
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .top-bar {
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 18px;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+        .hearts {
+            font-size: 24px;
+            letter-spacing: 5px;
+            color: white;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            text-align: center;
+        }
+        button#start-btn {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+            padding: 15px 40px;
+            font-size: 20px;
+            font-family: 'Courier New', Courier, monospace;
+            margin-top: 30px;
+            cursor: pointer;
+        }
+        button#start-btn:active {
+            background: white;
+            color: black;
+        }
+        
+        #boundary-line {
+            position: absolute;
+            top: 65%;
+            left: 0;
+            width: 100%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="boundary-line"></div>
+
+    <div id="ui-layer">
+        <div class="top-bar">
+            <div>SCORE:<br><span id="currentScore">0</span></div>
+            <div class="hearts" id="livesDisplay">♥♥♥</div>
+            <div style="text-align: right;">BEST:<br><span id="highScore">0</span></div>
+        </div>
+    </div>
+
+    <div id="overlay">
+        <h1 style="margin: 0; letter-spacing: 5px; font-size: 36px;">VOID RUNNER</h1>
+        <p style="color: #aaa; margin: 15px; font-size: 14px;">DRAG TO FLY. SURVIVE.</p>
+        <button id="start-btn" onclick="startGame()">INITIATE</button>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('currentScore');
+    const highEl = document.getElementById('highScore');
+    const livesEl = document.getElementById('livesDisplay');
+    const overlay = document.getElementById('overlay');
+
+    let score = 0;
+    let highScore = localStorage.getItem('voidHighScore') || 0;
+    highEl.innerText = highScore;
+    
+    let gameActive = false;
+    let spawnRate = 2000; 
+    let lastSpawn = 0;
+    
+    let diff = 1; 
+    let speedMultiplier = 0.8; // Starts slower at 0.8
+    const MAX_SPEED_MULTIPLIER = 1.5; // Capped at 1.5
+    
+    let lives = 3;
+    let totalAsteroidsSpawned = 0;
+    
+    let isInvincible = false;
+    let invincibilityEndTime = 0;
+
+    const player = { 
+        x: window.innerWidth / 2, 
+        y: window.innerHeight - 150, 
+        size: 20 
+    };
+    
+    let bullets = [];
+    let asteroids = [];
+    let heartsList = [];
+    let particles = [];
+    let stars = [];
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        if (!gameActive) {
+            player.y = canvas.height - 150;
+        }
+        initStars();
+    }
+    
+    function initStars() {
+        stars = [];
+        for(let i=0; i<100; i++) {
+            stars.push({
+                x: Math.random() * window.innerWidth,
+                y: Math.random() * window.innerHeight,
+                size: Math.random() * 2 + 0.5,
+                speed: Math.random() * 12 + 3 
+            });
+        }
+    }
+    
+    window.addEventListener('resize', resize);
+    resize();
+
+    window.addEventListener('touchmove', (e) => {
+        if (!gameActive) return;
+        
+        player.x = e.touches[0].clientX;
+        player.y = e.touches[0].clientY; 
+
+        if (player.x < 30) player.x = 30;
+        if (player.x > canvas.width - 30) player.x = canvas.width - 30;
+
+        const topLimit = canvas.height * 0.65; 
+        const bottomLimit = canvas.height - 30; 
+
+        if (player.y < topLimit) player.y = topLimit;
+        if (player.y > bottomLimit) player.y = bottomLimit;
+    });
+
+    function updateLivesUI() {
+        let display = "";
+        for(let i=0; i<3; i++) {
+            display += (i < lives) ? "♥" : "♡"; 
+        }
+        livesEl.innerText = display;
+    }
+
+    function startGame() {
+        score = 0; 
+        scoreEl.innerText = 0;
+        lives = 3;
+        totalAsteroidsSpawned = 0;
+        speedMultiplier = 0.8; // Reset to slow starting speed
+        diff = 1; 
+        
+        updateLivesUI();
+        
+        player.x = canvas.width / 2;
+        player.y = canvas.height - 150;
+
+        asteroids = []; 
+        bullets = [];
+        particles = [];
+        heartsList = [];
+        isInvincible = false;
+        
+        gameActive = true;
+        overlay.style.display = 'none';
+        requestAnimationFrame(update);
+    }
+
+    function gameOver() {
+        gameActive = false;
+        overlay.style.display = 'flex';
+        overlay.querySelector('h1').innerText = "HULL DESTROYED";
+        if (score > highScore) {
+            highScore = score;
+            localStorage.setItem('voidHighScore', highScore);
+            highEl.innerText = highScore;
+        }
+    }
+
+    function createAsteroid(x, y, vx, vy, size) {
+        let verts = [];
+        let numVerts = Math.floor(Math.random() * 5) + 6; 
+        for(let i=0; i<numVerts; i++) {
+            let angle = (i / numVerts) * Math.PI * 2;
+            let radius = size * (0.6 + Math.random() * 0.4); 
+            verts.push({x: Math.cos(angle) * radius, y: Math.sin(angle) * radius});
+        }
+        asteroids.push({ x, y, vx, vy, size, verts });
+
+        totalAsteroidsSpawned++;
+        
+        // Heart still drops every 30 asteroids to keep healing available
+        if (totalAsteroidsSpawned > 0 && totalAsteroidsSpawned % 30 === 0) {
+            heartsList.push({
+                x: Math.random() * (canvas.width - 60) + 30,
+                y: y - 50,
+                speed: 2.5 * speedMultiplier,
+                size: 10 
+            });
+        }
+    }
+
+    function spawnSingleAsteroid() {
+        let size = Math.random() * 25 + 20; 
+        let yOffset = Math.random() * 300 + 50; 
+        
+        // --- NEW SLOWER SPEED SCALING MATH ---
+        // Base is 0.8. Add 0.1 for every 50 asteroids. Cap at 1.5.
+        speedMultiplier = 0.8 + (Math.floor(totalAsteroidsSpawned / 50) * 0.1);
+        if (speedMultiplier > MAX_SPEED_MULTIPLIER) {
+            speedMultiplier = MAX_SPEED_MULTIPLIER;
+        }
+        
+        let vx = (Math.random() - 0.5) * 4 * speedMultiplier; 
+        let vy = (Math.random() * 1.5 + 1.5) * speedMultiplier; 
+        
+        createAsteroid(
+            Math.random() * (canvas.width - size * 2) + size, 
+            -yOffset, 
+            vx, vy, 
+            size 
+        );
+    }
+
+    function createExplosion(x, y, isPlayerHit = false, isHeartPickup = false) {
+        let count = isPlayerHit ? 20 : (isHeartPickup ? 12 : 8); 
+        for (let i = 0; i < count; i++) {
+            particles.push({
+                x, y,
+                vx: (Math.random() - 0.5) * (isPlayerHit ? 15 : 8),
+                vy: (Math.random() - 0.5) * (isPlayerHit ? 15 : 8),
+                life: 1.0,
+                isHeartParticle: isHeartPickup 
+            });
+        }
+    }
+
+    function drawVectorHeart(x, y, scale) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.bezierCurveTo(x, y - scale, x - scale * 2, y - scale, x - scale * 2, y + scale / 3);
+        ctx.bezierCurveTo(x - scale * 2, y + scale * 1.5, x, y + scale * 2.5, x, y + scale * 3);
+        ctx.bezierCurveTo(x, y + scale * 2.5, x + scale * 2, y + scale * 1.5, x + scale * 2, y + scale / 3);
+        ctx.bezierCurveTo(x + scale * 2, y - scale, x, y - scale, x, y);
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+
+    setInterval(() => { 
+        if (gameActive) bullets.push({ x: player.x, y: player.y - 20 }); 
+    }, 250);
+
+    function update(time) {
+        if (!gameActive) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = 'white';
+        stars.forEach(s => {
+            s.y += s.speed * speedMultiplier; 
+            if (s.y > canvas.height) {
+                s.y = 0;
+                s.x = Math.random() * canvas.width;
+            }
+            ctx.globalAlpha = s.size / 2.5; 
+            ctx.fillRect(s.x, s.y, s.size, s.size);
+        });
+        ctx.globalAlpha = 1.0; 
+
+        while (asteroids.length < 4) {
+            spawnSingleAsteroid();
+        }
+
+        if (time - lastSpawn > spawnRate / diff && asteroids.length < 8) {
+            let spaceLeft = 8 - asteroids.length;
+            let count = Math.floor(Math.random() * spaceLeft) + 1;
+            for (let i = 0; i < count; i++) spawnSingleAsteroid();
+            lastSpawn = time;
+            diff += 0.003; 
+        }
+
+        let drawShip = true;
+        if (isInvincible) {
+            if (time > invincibilityEndTime) {
+                isInvincible = false;
+            } else {
+                drawShip = Math.floor(time / 100) % 2 === 0;
+            }
+        }
+
+        if (drawShip) {
+            ctx.beginPath();
+            ctx.moveTo(player.x, player.y - player.size);
+            ctx.lineTo(player.x - player.size, player.y + player.size);
+            ctx.lineTo(player.x, player.y + player.size - 5);
+            ctx.lineTo(player.x + player.size, player.y + player.size);
+            ctx.closePath();
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.moveTo(player.x - 5, player.y + player.size - 2);
+            ctx.lineTo(player.x, player.y + player.size + Math.random() * 15 + 5);
+            ctx.lineTo(player.x + 5, player.y + player.size - 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+        }
+
+        ctx.fillStyle = 'white';
+        bullets.forEach((b, bi) => {
+            b.y -= 25; 
+            ctx.fillRect(b.x - 2, b.y, 4, 25); 
+            if (b.y < 0) bullets.splice(bi, 1);
+        });
+
+        heartsList.forEach((h, hi) => {
+            h.y += h.speed;
+            drawVectorHeart(h.x, h.y, h.size);
+
+            let dx = player.x - h.x;
+            let dy = player.y - (h.y + h.size * 1.5); 
+            let distance = Math.sqrt(dx*dx + dy*dy);
+            
+            if (distance < player.size + h.size * 2) { 
+                if (lives < 3) lives++; 
+                updateLivesUI();
+                createExplosion(h.x, h.y + 15, false, true); 
+                score += 50; 
+                scoreEl.innerText = score;
+                heartsList.splice(hi, 1);
+            } else if (h.y > canvas.height + 50) {
+                heartsList.splice(hi, 1);
+            }
+        });
+
+        asteroids.forEach((a, ai) => {
+            a.x += a.vx;
+            a.y += a.vy;
+
+            if (a.x < a.size) {
+                a.x = a.size; 
+                a.vx *= -1;   
+            } else if (a.x > canvas.width - a.size) {
+                a.x = canvas.width - a.size;
+                a.vx *= -1;
+            }
+            
+            ctx.beginPath();
+            ctx.moveTo(a.x + a.verts[0].x, a.y + a.verts[0].y);
+            for(let i=1; i<a.verts.length; i++) {
+                ctx.lineTo(a.x + a.verts[i].x, a.y + a.verts[i].y);
+            }
+            ctx.closePath();
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            if (!isInvincible) {
+                let dx = player.x - a.x;
+                let dy = player.y - a.y;
+                let distance = Math.sqrt(dx*dx + dy*dy);
+                
+                if (distance < a.size + player.size - 5) { 
+                    createExplosion(player.x, player.y, true); 
+                    asteroids.splice(ai, 1); 
+                    
+                    lives--;
+                    updateLivesUI();
+                    
+                    if (lives <= 0) {
+                        gameOver();
+                    } else {
+                        isInvincible = true;
+                        invincibilityEndTime = time + 1500;
+                    }
+                }
+            }
+
+            bullets.forEach((b, bi) => {
+                let bx = b.x - a.x;
+                let by = b.y - a.y;
+                let bDist = Math.sqrt(bx*bx + by*by);
+                
+                if (bDist < a.size) {
+                    createExplosion(a.x, a.y);
+                    asteroids.splice(ai, 1);
+                    bullets.splice(bi, 1);
+                    score += 10;
+                    scoreEl.innerText = score;
+                }
+            });
+
+            if (a.y > canvas.height + a.size) {
+                asteroids.splice(ai, 1);
+            }
+        });
+
+        particles.forEach((p, pi) => {
+            p.x += p.vx;
+            if (p.isHeartParticle) {
+                p.y -= 2; 
+                p.life -= 0.03;
+            } else {
+                p.y += p.vy;
+                p.life -= 0.05;
+            }
+            
+            ctx.fillStyle = `rgba(255, 255, 255, ${p.life})`;
+            ctx.fillRect(p.x, p.y, 3, 3);
+            
+            if (p.life <= 0) particles.splice(pi, 1);
+        });
+
+        requestAnimationFrame(update);
+    }
+</script>
+</body>
+</html>
