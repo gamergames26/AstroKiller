@@ -117,12 +117,12 @@
     highEl.innerText = highScore;
     
     let gameActive = false;
-    let spawnRate = 2000; 
+    let spawnRate = 1600; // Tighter spawn rate (was 2000)
     let lastSpawn = 0;
     
     let diff = 1; 
-    let speedMultiplier = 1.5; // Changed: Starts much faster at 1.5
-    const MAX_SPEED_MULTIPLIER = 2.5; // Changed: Capped at 2.5
+    let speedMultiplier = 1.0; // Starts faster (was 0.8)
+    const MAX_SPEED_MULTIPLIER = 2.0; // Higher max speed (was 1.5)
     
     let lives = 3;
     let totalAsteroidsSpawned = 0;
@@ -195,7 +195,7 @@
         scoreEl.innerText = 0;
         lives = 3;
         totalAsteroidsSpawned = 0;
-        speedMultiplier = 1.5; // Changed: Reset to fast starting speed
+        speedMultiplier = 1.0; 
         diff = 1; 
         
         updateLivesUI();
@@ -237,7 +237,6 @@
 
         totalAsteroidsSpawned++;
         
-        // Heart drops every 30 asteroids
         if (totalAsteroidsSpawned > 0 && totalAsteroidsSpawned % 30 === 0) {
             heartsList.push({
                 x: Math.random() * (canvas.width - 60) + 30,
@@ -253,8 +252,8 @@
         let yOffset = Math.random() * 300 + 50; 
         
         // --- NEW SPEED SCALING MATH ---
-        // Changed: Base is 1.5. Add 0.1 for every 50 asteroids. Cap at 2.5.
-        speedMultiplier = 1.5 + (Math.floor(totalAsteroidsSpawned / 50) * 0.1);
+        // Base is 1.0. Add 0.1 for every 40 asteroids. Cap at 2.0.
+        speedMultiplier = 1.0 + (Math.floor(totalAsteroidsSpawned / 40) * 0.1);
         if (speedMultiplier > MAX_SPEED_MULTIPLIER) {
             speedMultiplier = MAX_SPEED_MULTIPLIER;
         }
